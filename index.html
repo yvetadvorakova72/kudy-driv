@@ -196,7 +196,8 @@ const stopCache=new Map();
 async function stopsNear(place,range=600){
   const key=place.lat.toFixed(5)+","+place.lon.toFixed(5)+","+range+","+(place.stopName||"");
   if(stopCache.has(key))return stopCache.get(key);
-  const j=await gget("/v2/gtfs/stops",{latlng:place.lat+","+place.lon,range,limit:60});
+  /* pozor: Golemio při parametru range vrací chybu 500, proto filtrujeme vzdálenost sami */
+  const j=await gget("/v2/gtfs/stops",{latlng:place.lat+","+place.lon,limit:300});
   const groups=new Map();
   for(const f of (j&&j.features)||[]){
     const p=f.properties||{};const c=(f.geometry||{}).coordinates||[];
@@ -204,6 +205,7 @@ async function stopsNear(place,range=600){
     const name=p.stop_name;if(!name)continue;
     if(place.stopName&&name!==place.stopName)continue;
     const d=hav(place,{lat:c[1],lon:c[0]});
+    if(d*1000>range)continue;
     const g=groups.get(name)||{name,ids:[],dist:99};
     g.ids.push(p.stop_id);g.dist=Math.min(g.dist,d);groups.set(name,g);
   }
@@ -236,10 +238,11 @@ async function board(groups,from,minutesAfter,mode){
   const iso=from.getFullYear()+"-"+pad(from.getMonth()+1)+"-"+pad(from.getDate())+"T"+pad(from.getHours())+":"+pad(from.getMinutes())+":00";
   const j=await gget("/v2/pid/departureboards",{ids,timeFrom:iso,minutesBefore:0,minutesAfter,limit:100,mode,includeMetroTrains:"true",preferredTimezone:"Europe/Prague"});
   const tsKey=mode==="arrivals"?"arrival_timestamp":"departure_timestamp";
+  const names=new Map(((j&&j.stops)||[]).map(s=>[s.stop_id,s.stop_name]));
   return((j&&j.departures)||[]).map(d=>{
     const ts=d[tsKey]||d.departure_timestamp||{};
     return{time:new Date(ts.predicted||ts.scheduled),line:(d.route||{}).short_name||"?",type:(d.route||{}).type,
-      tripId:(d.trip||{}).id,headsign:(d.trip||{}).headsign||"",stopId:(d.stop||{}).id};
+      tripId:(d.trip||{}).id,headsign:(d.trip||{}).headsign||"",stopId:(d.stop||{}).id,stopName:names.get((d.stop||{}).id)||""};
   }).filter(d=>d.tripId&&!isNaN(d.time));
 }
 function nameOfId(groups,id){const g=groups.find(g=>g.ids.includes(id));return g?g.name:null}
@@ -257,8 +260,8 @@ async function directLeg(from,to,leaveAt){
   const patterns=new Map();const options=[];const reach=[];
   let fetched=0;
   for(const d of deps){
-    const fromName=nameOfId(fromStops,d.stopId);if(!fromName)continue;
-    const g=fromStops.find(x=>x.name===fromName);const wf=walkMin(g.dist);
+    const fromName=nameOfId(fromStops,d.stopId)||d.stopName;
+    const g=fromStops.find(x=>x.name===fromName);if(!g)continue;const wf=walkMin(g.dist);
     if(d.time<addMin(leaveAt,wf))continue;
     const pk=d.line+"|"+d.headsign+"|"+fromName;
     if(!patterns.has(pk)){
