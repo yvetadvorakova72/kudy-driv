@@ -86,6 +86,7 @@ a.btnlink{display:inline-block;border:1px solid var(--line);border-radius:8px;pa
     </div>
 
     <button class="primary" id="go" style="width:100%;padding:12px">Naplánovat</button>
+    <button id="reset" style="width:100%;margin-top:8px">Vymazat zadání</button>
     <div id="out" style="margin-top:12px"></div>
   </section>
 
@@ -275,8 +276,12 @@ async function directLeg(from,to,leaveAt){
           const base=st[i].dep??st[i].arr;
           const after=st.slice(i+1).map(s=>({name:s.name,id:s.id,off:Math.round(((s.arr??s.dep)-base)/60)}));
           reach.push({line:d.line,type:d.type,fromName,after});
-          const hit=after.find(s=>toIds.has(s.id)||toNames.has(s.name));
-          if(hit)pat={off:hit.off,toName:hit.name||nameOfId(toStops,hit.id)};
+          /* vystoupit tam, odkud je to k cíli nejrychlejší (jízda + chůze) */
+          let bestHit=null;
+          for(const s of after){if(!(toIds.has(s.id)||toNames.has(s.name)))continue;
+            const nm=s.name||nameOfId(toStops,s.id);const g=toNames.get(nm);const wk=walkMin(g?g.dist:0.3),tot=s.off+wk;
+            if(!bestHit||tot<bestHit.tot||(tot===bestHit.tot&&wk<bestHit.wk))bestHit={off:s.off,toName:nm,tot,wk}}
+          if(bestHit)pat={off:bestHit.off,toName:bestHit.toName};
         }
       }catch(e){if(e instanceof ApiErr&&/token/.test(e.message))throw e}
       patterns.set(pk,pat);
@@ -325,16 +330,28 @@ async function transferCandidates(direct,leaveAt){
   }
   return[...cand.entries()].sort((a,b)=>a[1]-b[1]).slice(0,3).map(([name,est])=>({name,est}));
 }
+/* jeden kus cesty: pěšky (do 900 m), nebo přímý spoj */
+async function seg(from,to,leaveAt,arriveBy){
+  const d=hav(from,to);
+  if(d<0.9){const w=walkMin(d);return{walk:true,w,leave:leaveAt,arrive:addMin(leaveAt,w),arrStop:addMin(leaveAt,w),toName:to.stopName||to.name}}
+  const l=await directLeg(from,to,leaveAt);return pickOption(l.options,arriveBy);
+}
 async function viaLeg(from,to,leaveAt,viaName,arriveBy){
   const T=await stopByName(viaName);
   if(!T)throw new ApiErr("Zastávku „"+viaName+"“ jsem nenašla. Zkus přesný název jako v jízdním řádu.");
-  const l1=await directLeg(from,T,leaveAt);const o1=pickOption(l1.options);
-  if(!o1)return null;
-  const l2=await directLeg(T,to,addMin(o1.arrStop,3));
-  let o2=pickOption(l2.options,arriveBy);
-  if(!o2)return null;
-  o1.walkTo=0;o2.walkFrom=0;
-  return{parts:[o1,o2],leave:o1.leave,arrive:o2.arrive,via:viaName};
+  const o1=await seg(from,T,leaveAt);if(!o1)return null;
+  const o2=await seg(T,to,o1.walk?o1.arrive:addMin(o1.arrStop,3),arriveBy);if(!o2)return null;
+  if(!o1.walk)o1.walkTo=0;
+  if(!o2.walk){o2.walkFrom=0;o2.leave=o2.dep}
+  const leave=o1.walk?addMin(o2.leave,-o1.w):o1.leave;
+  return{parts:[o1,o2],leave,arrive:o2.arrive,via:viaName};
+}
+function legHtml(v){
+  const ps=v.parts;let h="";
+  ps.forEach((p,i)=>{if(i&&!ps[i-1].walk&&!p.walk)h+=`<div>⏱ přestup ${minsBetween(ps[i-1].arrStop,p.dep)} min</div>`;h+=`<div>${partHtml(p)}</div>`});
+  const f=ps.find(p=>!p.walk),l=[...ps].reverse().find(p=>!p.walk);
+  if(f)h+=`<div class="btns"><a class="btnlink" target="_blank" rel="noopener" href="${idosLink(f.fromName,l.toName,f.dep)}">Ověřit v IDOS</a></div>`;
+  return h;
 }
 
 /* ---------- výběr místa ---------- */
@@ -342,8 +359,22 @@ function picker(el,current,onPick,opts={}){
   const id="p"+Math.random().toString(36).slice(2,8);
   function draw(){
     if(current){
-      el.innerHTML=`<div class="chosen"><span>${esc(current.label||current.name)}</span><button class="small" id="${id}-x">Změnit</button></div>`;
+      const v=current.via||["",""];
+      el.innerHTML=`<div class="chosen"><span>${esc(current.label||current.name)}</span><button class="small" id="${id}-x">Změnit</button></div>
+        <details id="${id}-d" ${v[0]||v[1]?"open":""} style="margin-top:6px"><summary class="muted">Jezdím přes zastávku (nepovinné)</summary>
+          <div class="row" style="margin-top:4px">
+            <div><input id="${id}-v0" list="${id}-dl" placeholder="např. Nádraží Holešovice" value="${esc(v[0])}" aria-label="Zastávka 1"></div>
+            <div><input id="${id}-v1" list="${id}-dl" placeholder="druhá možnost" value="${esc(v[1])}" aria-label="Zastávka 2"></div>
+          </div><datalist id="${id}-dl"></datalist>
+          <div class="muted" style="font-size:.8rem">Název přesně jako v jízdním řádu, při psaní nabídnu zastávky v okolí. Aplikace porovná cestu přes ně s běžnou cestou a vybere rychlejší.</div>
+        </details>`;
       el.querySelector("#"+id+"-x").onclick=()=>{current=null;onPick(null);draw()};
+      const v0=el.querySelector("#"+id+"-v0"),v1=el.querySelector("#"+id+"-v1");
+      const save=()=>{current.via=[v0.value.trim(),v1.value.trim()];onPick(current)};
+      v0.onchange=save;v1.onchange=save;
+      let filled=false;const fill=()=>{if(filled||!settings.golemioKey)return;filled=true;
+        stopsNear(current,1500).then(gs=>{el.querySelector("#"+id+"-dl").innerHTML=gs.map(g=>`<option value="${esc(g.name)}">`).join("")}).catch(()=>{filled=false})};
+      v0.onfocus=fill;v1.onfocus=fill;
       return;
     }
     const favOpts=favs.map((f,i)=>`<option value="f${i}">⭐ ${esc(f.name)}</option>`).join("");
@@ -366,7 +397,7 @@ function picker(el,current,onPick,opts={}){
           ()=>{r.innerHTML='<span class="err">Polohu se nepodařilo zjistit. Povol ji v prohlížeči, nebo vyber místo ručně.</span>'},{enableHighAccuracy:true,timeout:15000});
         return;
       }
-      const f=favs[Number(v.slice(1))];current={...f,label:"⭐ "+f.name};onPick(current);draw();
+      const f=favs[Number(v.slice(1))];current={...f,via:[...(f.via||["",""])],label:"⭐ "+f.name};onPick(current);draw();
     };
     const search=async()=>{
       const text=q.value.trim();if(!text)return;
@@ -417,6 +448,16 @@ $("#add-stop").onclick=()=>{if(draft.stops.length>=7)return;draft.stops.push(new
 $("#ret").onchange=e=>{draft.ret=e.target.checked;saveDraft();renderPlan()};
 $("#dep-now").onclick=()=>{$("#dep-time").value=hm(new Date())};
 $("#dep-time").value=hm(new Date());
+let resetTimer=null;
+$("#reset").onclick=()=>{
+  const b=$("#reset");
+  if(!resetTimer){b.textContent="Opravdu vymazat? Klepni znovu";b.classList.add("on");
+    resetTimer=setTimeout(()=>{resetTimer=null;b.textContent="Vymazat zadání";b.classList.remove("on")},4000);return}
+  clearTimeout(resetTimer);resetTimer=null;b.textContent="Vymazat zadání";b.classList.remove("on");
+  if(busy)return;
+  draft={start:null,stops:[newStop(),newStop()],ret:false,end:null};saveDraft();
+  P=null;$("#out").innerHTML="";$("#dep-time").value=hm(new Date());renderPlan();window.scrollTo(0,0);
+};
 
 /* všechna možná pořadí, seřazená od nejlepšího (podle odhadu) */
 function rankOrders(start,stops,end,depart){
@@ -448,6 +489,7 @@ function idosLink(fromName,toName,when){
 }
 function walkLink(a,b){return`https://mapy.com/fnc/v1/route?start=${a.lon},${a.lat}&end=${b.lon},${b.lat}&routeType=foot_fast`}
 function partHtml(o){
+  if(o.walk)return`🚶 pěšky ${o.w} min${o.toName?" na <b>"+esc(o.toName)+"</b>":""}`;
   return`${o.walkFrom?`🚶 ${o.walkFrom} min → `:""}<b>${typeIcon(o.type)} ${esc(o.line)}</b> v <b>${hm(o.dep)}</b> z <b>${esc(o.fromName)}</b> <span class="muted">(směr ${esc(o.headsign)})</span> → <b>${esc(o.toName)}</b> ${hm(o.arrStop)}${o.walkTo?` → 🚶 ${o.walkTo} min`:""}`;
 }
 
@@ -569,11 +611,28 @@ async function renderLeg(el,from,to,leaveAt,arriveBy,via){
     return addMin(leaveAt,w);
   }
   el.innerHTML="Hledám spoj…";
+  /* zastávky, přes které u místa jezdíš */
+  const prefs=via?[]:[...new Set([...(from.via||[]),...(to.via||[])].map(x=>(x||"").trim()).filter(Boolean))];
+  if(prefs.length){
+    const all=[],errs=[];
+    for(const p of prefs){try{const v=await viaLeg(from,to,leaveAt,p,arriveBy);if(v)all.push(v);else errs.push("Přes "+p+" jsem spoj v nejbližší hodině nenašla.")}catch(e){errs.push(e.message)}}
+    try{const dl=await directLeg(from,to,leaveAt);const o=pickOption(dl.options,arriveBy);if(o)all.push({parts:[o],leave:o.leave,arrive:o.arrive,via:null})}catch(e){}
+    if(all.length){
+      const fit=arriveBy?all.filter(x=>x.arrive<=addMin(arriveBy,-2)):[];
+      const best=(fit.length?fit:all).reduce((a,b)=>b.arrive<a.arrive?b:a);
+      const others=all.filter(x=>x!==best).map(x=>`${x.via?"přes "+esc(x.via):"přímo"} příchod ${hm(x.arrive)}`);
+      el.innerHTML=(best.via?`<div class="ok">Přes tvou zastávku <b>${esc(best.via)}</b>:</div>`:`<div class="muted">Rychlejší je jet přímo, ne přes tvou zastávku:</div>`)
+        +legHtml(best)+(best.leave>leaveAt?`<div class="muted">Vyraž v ${hm(best.leave)}.</div>`:"")
+        +(others.length?`<div class="muted">Porovnání: ${others.join(" · ")}</div>`:"")
+        +errs.map(m=>`<div class="warn" style="font-size:.85rem">${esc(m)}</div>`).join("")+viaForm(el,from,to,leaveAt,arriveBy,[]);
+      bindVia(el,from,to,leaveAt,arriveBy);
+      return best.arrive;
+    }
+  }
   if(via){
     const v=await viaLeg(from,to,leaveAt,via,arriveBy);
     if(!v){el.innerHTML=`<span class="warn">Přes ${esc(via)} jsem spoj v nejbližší hodině nenašla.</span>`+viaForm(el,from,to,leaveAt,arriveBy,[]);bindVia(el,from,to,leaveAt,arriveBy);return addMin(leaveAt,estMin(from,to))}
-    el.innerHTML=`<div>${partHtml(v.parts[0])}</div><div>⏱ přestup ${minsBetween(v.parts[0].arrStop,v.parts[1].dep)} min</div><div>${partHtml(v.parts[1])}</div>
-      <div class="btns"><a class="btnlink" target="_blank" rel="noopener" href="${idosLink(v.parts[0].fromName,v.parts[1].toName,v.parts[0].dep)}">Ověřit v IDOS</a></div>`+viaForm(el,from,to,leaveAt,arriveBy,[]);
+    el.innerHTML=`<div class="muted">Přes ${esc(via)}:</div>${legHtml(v)}${v.leave>leaveAt?`<div class="muted">Vyraž v ${hm(v.leave)}.</div>`:""}`+viaForm(el,from,to,leaveAt,arriveBy,[]);
     bindVia(el,from,to,leaveAt,arriveBy);
     return v.arrive;
   }
@@ -597,8 +656,7 @@ async function renderLeg(el,from,to,leaveAt,arriveBy,via){
       const v=await viaLeg(from,to,leaveAt,cands[0].name,arriveBy);
       if(v){
         el.innerHTML=`<div class="warn">Přímý spoj není, nejlépe přes <b>${esc(cands[0].name)}</b>:</div>
-          <div>${partHtml(v.parts[0])}</div><div>⏱ přestup ${minsBetween(v.parts[0].arrStop,v.parts[1].dep)} min</div><div>${partHtml(v.parts[1])}</div>
-          <div class="btns"><a class="btnlink" target="_blank" rel="noopener" href="${idosLink(v.parts[0].fromName,v.parts[1].toName,v.parts[0].dep)}">Ověřit v IDOS</a></div>`+viaForm(el,from,to,leaveAt,arriveBy,cands.slice(1));
+          ${legHtml(v)}`+viaForm(el,from,to,leaveAt,arriveBy,cands.slice(1));
         bindVia(el,from,to,leaveAt,arriveBy);
         return v.arrive;
       }
@@ -630,15 +688,18 @@ function renderFavs(){
   picker($("#fav-picker"),null,p=>{favPick=p});
   const list=$("#fav-list");
   if(!favs.length){list.innerHTML='<div class="card muted">Zatím tu nic není. Přidej třeba Domov nebo Práci.</div>';return}
-  list.innerHTML=favs.map((f,i)=>`<div class="card row" style="align-items:center"><div><b>${esc(f.name)}</b><div class="muted">${esc(f.label||"")}</div></div>
+  list.innerHTML=favs.map((f,i)=>`<div class="card row" style="align-items:center"><div><b>${esc(f.name)}</b><div class="muted">${esc(f.label||"")}</div>
+    <div class="row" style="margin-top:6px"><div><label for="fv${i}a">Jezdím přes</label><input id="fv${i}a" data-fv="${i}" data-k="0" value="${esc((f.via||[])[0]||"")}" placeholder="zastávka"></div>
+    <div><label for="fv${i}b">nebo přes</label><input id="fv${i}b" data-fv="${i}" data-k="1" value="${esc((f.via||[])[1]||"")}" placeholder="zastávka"></div></div></div>
     <div class="shrink"><button class="small" data-up="${i}" ${i?"":"disabled"}>↑</button> <button class="small" data-rm="${i}">Smazat</button></div></div>`).join("");
+  list.querySelectorAll("[data-fv]").forEach(inp=>inp.onchange=()=>{const f=favs[Number(inp.dataset.fv)];f.via=f.via||["",""];f.via[Number(inp.dataset.k)]=inp.value.trim();store.set("kd_favs",favs)});
   list.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{favs.splice(Number(b.dataset.rm),1);store.set("kd_favs",favs);renderFavs()});
   list.querySelectorAll("[data-up]").forEach(b=>b.onclick=()=>{const i=Number(b.dataset.up);[favs[i-1],favs[i]]=[favs[i],favs[i-1]];store.set("kd_favs",favs);renderFavs()});
 }
 $("#fav-save").onclick=()=>{
   const name=$("#fav-name").value.trim();
   if(!name||!favPick){$("#fav-msg").textContent="Vyplň název a vyhledej místo.";return}
-  favs.push({name,label:favPick.label||favPick.name,lat:favPick.lat,lon:favPick.lon});
+  favs.push({name,label:favPick.label||favPick.name,lat:favPick.lat,lon:favPick.lon,via:favPick.via||["",""]});
   store.set("kd_favs",favs);$("#fav-name").value="";favPick=null;$("#fav-msg").textContent="Uloženo.";renderFavs();
 };
 
