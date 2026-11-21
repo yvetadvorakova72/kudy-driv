@@ -11,11 +11,13 @@
 :root{
   --bg:#f6f7f9; --card:#fff; --fg:#1b1f24; --muted:#5f6b7a; --line:#dde2e8;
   --accent:#0b6bcb; --accent-fg:#fff; --ok:#1f7a3d; --warn:#a35a00; --bad:#b3261e;
+  --home:#1f8a4c; --home-bg:#eaf6ee; --stop:#0b6bcb; --stop-bg:#e8f1fb; --cmp:#c99700; --cmp-bg:#fff7d6;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#121417; --card:#1c1f24; --fg:#e8ebef; --muted:#9aa5b1; --line:#2e333a;
   --accent:#5aa9ff; --accent-fg:#0b1520; --ok:#6fd18f; --warn:#f0b35a; --bad:#ff8a80;
+  --home:#5ccb87; --home-bg:#16261c; --stop:#5aa9ff; --stop-bg:#14202e; --cmp:#f2c94c; --cmp-bg:#2a2410;
   color-scheme:dark;}}
 *{box-sizing:border-box}
 html,body{margin:0}
@@ -46,7 +48,19 @@ label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:3px}
 .results{margin-top:6px;display:flex;flex-direction:column;gap:4px}
 .results button{text-align:left}
 .chosen{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 8px;border:1px dashed var(--line);border-radius:8px}
-.step{border-left:3px solid var(--accent);padding:4px 0 4px 10px;margin:6px 0}
+.step{border-left:4px solid var(--stop);padding:4px 0 4px 10px;margin:6px 0}
+.step.s-home{border-left-color:var(--home)}
+button{touch-action:manipulation}
+.c-home{background:var(--home-bg);border-color:var(--home);border-left-width:6px}
+.c-stop{background:var(--stop-bg);border-color:var(--stop);border-left-width:6px}
+.c-cmp{background:var(--cmp-bg);border-color:var(--cmp);border-left-width:6px}
+.c-home h2,.c-home .lbl{color:var(--home)}
+.c-stop h2{color:var(--stop)}
+.num{display:inline-flex;align-items:center;justify-content:center;width:1.6em;height:1.6em;border-radius:50%;background:var(--stop);color:var(--accent-fg);font-size:.85em;margin-right:6px}
+.c-home .chosen,.c-stop .chosen{background:var(--card)}
+.confirm{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
+.confirm>*{flex:1 1 120px}
+button.danger{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:600}
 .leg{padding:6px 0 6px 13px;color:var(--muted);font-size:.92rem}
 .leg b{color:var(--fg)}
 .btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
@@ -66,8 +80,8 @@ a.btnlink{display:inline-block;border:1px solid var(--line);border-radius:8px;pa
 
   <section id="v-plan">
     <div id="keys-warning" class="card warn" hidden>Nejdřív vlož klíče v <b>Nastavení</b>.</div>
-    <div class="card">
-      <h2>Odkud</h2>
+    <div class="card c-home">
+      <h2>🏠 Odkud</h2>
       <div id="start-picker"></div>
       <div class="row" style="margin-top:8px">
         <div><label for="dep-time">Vyrážím v</label><input id="dep-time" type="time"></div>
@@ -78,15 +92,20 @@ a.btnlink{display:inline-block;border:1px solid var(--line);border-radius:8px;pa
     <div id="stops"></div>
     <button id="add-stop" style="width:100%;margin-bottom:10px">+ Přidat místo</button>
 
-    <div class="card">
-      <label style="display:flex;gap:6px;align-items:center;color:var(--fg);font-size:.95rem">
-        <input type="checkbox" id="ret"> Na konci se vracím
+    <div class="card c-home">
+      <label class="lbl" style="display:flex;gap:6px;align-items:center;font-size:.95rem;font-weight:600">
+        <input type="checkbox" id="ret"> 🏁 Na konci se vracím
       </label>
       <div id="end-picker" hidden style="margin-top:8px"></div>
     </div>
 
     <button class="primary" id="go" style="width:100%;padding:12px">Naplánovat</button>
     <button id="reset" style="width:100%;margin-top:8px">Vymazat zadání</button>
+    <div id="reset-confirm" class="confirm" hidden>
+      <span>Smazat start, místa i výsledky? Oblíbená zůstanou.</span>
+      <button class="danger" id="reset-yes">Ano, vymazat</button>
+      <button id="reset-no">Zrušit</button>
+    </div>
     <div id="out" style="margin-top:12px"></div>
   </section>
 
@@ -421,8 +440,8 @@ function renderPlan(){
   picker($("#start-picker"),draft.start,p=>{draft.start=p;saveDraft()},{allowGeo:true});
   const box=$("#stops");box.innerHTML="";
   draft.stops.forEach((s,i)=>{
-    const c=document.createElement("div");c.className="card";
-    c.innerHTML=`<div class="row" style="align-items:center"><h2 style="margin:0">Místo ${i+1}</h2>
+    const c=document.createElement("div");c.className="card c-stop";
+    c.innerHTML=`<div class="row" style="align-items:center"><h2 style="margin:0"><span class="num">${i+1}</span>Místo ${i+1}</h2>
       <div class="shrink"><button class="small" data-del>Odebrat</button></div></div>
       <div data-pk style="margin-top:6px"></div>
       <div class="row" style="margin-top:8px">
@@ -448,15 +467,12 @@ $("#add-stop").onclick=()=>{if(draft.stops.length>=7)return;draft.stops.push(new
 $("#ret").onchange=e=>{draft.ret=e.target.checked;saveDraft();renderPlan()};
 $("#dep-now").onclick=()=>{$("#dep-time").value=hm(new Date())};
 $("#dep-time").value=hm(new Date());
-let resetTimer=null;
-$("#reset").onclick=()=>{
-  const b=$("#reset");
-  if(!resetTimer){b.textContent="Opravdu vymazat? Klepni znovu";b.classList.add("on");
-    resetTimer=setTimeout(()=>{resetTimer=null;b.textContent="Vymazat zadání";b.classList.remove("on")},4000);return}
-  clearTimeout(resetTimer);resetTimer=null;b.textContent="Vymazat zadání";b.classList.remove("on");
-  if(busy)return;
+$("#reset").onclick=()=>{$("#reset").hidden=true;$("#reset-confirm").hidden=false};
+$("#reset-no").onclick=()=>{$("#reset-confirm").hidden=true;$("#reset").hidden=false};
+$("#reset-yes").onclick=()=>{
+  $("#reset-confirm").hidden=true;$("#reset").hidden=false;
   draft={start:null,stops:[newStop(),newStop()],ret:false,end:null};saveDraft();
-  P=null;$("#out").innerHTML="";$("#dep-time").value=hm(new Date());renderPlan();window.scrollTo(0,0);
+  P=null;busy=false;$("#out").innerHTML="";$("#dep-time").value=hm(new Date());renderPlan();window.scrollTo(0,0);
 };
 
 /* všechna možná pořadí, seřazená od nejlepšího (podle odhadu) */
@@ -506,16 +522,16 @@ function plan(){
   const depart=todayAt($("#dep-time").value)||new Date();
   const end=draft.ret?(draft.end||draft.start):null;
   P={start:draft.start,stops,end,depart,ranked:rankOrders(draft.start,stops,end,depart),real:{},views:{},shown:null,auto:false};
-  out.innerHTML='<div class="card" id="cmp"></div><div class="card" id="detail"></div>';
+  out.innerHTML='<div class="card c-cmp" id="cmp"></div><div class="card" id="detail"></div>';
   autoCompare();
 }
 /* když jsou dvě nejlepší pořadí podle odhadu blízko, spočítá obě přesně */
 async function autoCompare(){
-  const r=P.ranked;
-  await runPlan(r[0]);
+  const r=P.ranked,PP=P;
+  await runPlan(r[0]);if(P!==PP)return;
   if(r.length>1&&!r[1].late&&minsBetween(r[0].finish,r[1].finish)<=5){
     P.auto=true;renderCompare();
-    await runPlan(r[1],true);
+    await runPlan(r[1],true);if(P!==PP)return;
     P.auto=false;
     const rec=recommended();
     if(rec!==r[0])showView(rec);
@@ -551,6 +567,7 @@ function renderCompare(){
   const rec=recommended();
   let flip="";
   if(rec!==best)flip=`<div class="ok" style="margin-top:6px">Podle skutečných odjezdů je ale rychlejší začít místem <b>${esc(P.stops[rec.order[0]].place.name)}</b>: hotová budeš v ${hm(P.real[rec.key].finish)} místo ${hm(P.real[best.key].finish)}. Doporučuji tohle pořadí.</div>`;
+  else if(r.length>1&&P.real[r[1].key]&&P.real[best.key]&&Math.abs(minsBetween(P.real[best.key].finish,P.real[r[1].key].finish))<=2)flip=`<div style="margin-top:6px">Podle skutečných odjezdů vycházejí obě pořadí prakticky stejně (hotovo ${hm(P.real[best.key].finish)} nebo ${hm(P.real[r[1].key].finish)}). Vyber si, co je ti příjemnější.</div>`;
   else if(r.length>1&&P.real[r[1].key]&&P.real[best.key])flip=`<div class="ok" style="margin-top:6px">Začni místem <b>${esc(P.stops[best.order[0]].place.name)}</b>. Podle skutečných odjezdů budeš hotová v ${hm(P.real[best.key].finish)}, kdybys začala místem ${esc(P.stops[r[1].order[0]].place.name)}, tak až v ${hm(P.real[r[1].key].finish)}.</div>`;
   if(P.auto)flip+='<div class="muted" style="margin-top:6px">Odhady jsou blízko, počítám přesně i druhou možnost…</div>';
   const verified=r.length>1&&P.real[best.key]&&P.real[r[1].key]&&minsBetween(best.finish,r[1].finish)<=3;
@@ -569,7 +586,7 @@ function renderCompare(){
   el.querySelectorAll("[data-run]").forEach(b=>b.onclick=()=>{const e=P.ranked.find(x=>x.key===b.dataset.run);if(P.views[e.key])showView(e);else runPlan(e)});
 }
 async function runPlan(entry,silent){
-  if(busy)return;busy=true;
+  if(busy)return;busy=true;const PP=P;
   const box=document.createElement("div");P.views[entry.key]=box;
   if(!silent){P.shown=entry.key;$("#detail").replaceChildren(box)}
   renderCompare();
@@ -578,7 +595,7 @@ async function runPlan(entry,silent){
   box.innerHTML=`<h2>Plán: ${esc(orderNames(entry).join(" → "))}</h2><div data-legs></div>`;
   const legsEl=box.querySelector("[data-legs]");
   let cur=depart,late=0;
-  legsEl.insertAdjacentHTML("beforeend",`<div class="step"><b>${hm(cur)}</b> vyrážíš: ${esc(P.start.name)}</div>`);
+  legsEl.insertAdjacentHTML("beforeend",`<div class="step s-home"><b>${hm(cur)}</b> 🏠 vyrážíš: ${esc(P.start.name)}</div>`);
   try{
   for(let k=1;k<nodes.length;k++){
     const from=nodes[k-1].place,node=nodes[k],to=node.place;
@@ -587,19 +604,20 @@ async function runPlan(entry,silent){
     let arrival;
     try{arrival=await renderLeg(legDiv,from,to,cur,arriveBy)}
     catch(e){legDiv.innerHTML=`<span class="err">${esc(e.message)}</span>`;arrival=addMin(cur,estMin(from,to))}
+    if(P!==PP)return; /* mezitím bylo zadání vymazáno nebo spuštěno znovu */
     cur=arrival;
     const fx=todayAt(node.fixed),fr=todayAt(node.from),un=todayAt(node.until);
     let note="";
     if(fx){if(cur>fx){late++;note=` <span class="err">přijdeš o ${minsBetween(fx,cur)} min pozdě na ${node.fixed}</span>`}else{note=` <span class="ok">schůzka ${node.fixed}</span>`;cur=fx}}
     if(fr&&cur<fr){note+=` <span class="warn">otevírá až ${node.from}</span>`;cur=fr}
     if(un&&addMin(cur,node.stay)>un){late++;note+=` <span class="err">zavírají v ${node.until}</span>`}
-    const label=node.isEnd?"konec: "+esc(to.name):(k)+". "+esc(to.name);
-    legsEl.insertAdjacentHTML("beforeend",`<div class="step"><b>${hm(arrival)}</b> ${label}${node.stay?` <span class="muted">(${node.stay} min)</span>`:""}${note}</div>`);
+    const label=node.isEnd?"🏁 konec: "+esc(to.name):`<span class="num">${k}</span>`+esc(to.name);
+    legsEl.insertAdjacentHTML("beforeend",`<div class="step ${node.isEnd?"s-home":""}"><b>${hm(arrival)}</b> ${label}${node.stay?` <span class="muted">(${node.stay} min)</span>`:""}${note}</div>`);
     cur=addMin(cur,node.stay||0);
   }
   legsEl.insertAdjacentHTML("beforeend",`<div class="muted" style="margin-top:6px">Hotovo kolem <b>${hm(cur)}</b>.</div>`);
   P.real[entry.key]={finish:cur,late};
-  }finally{busy=false;renderCompare()}
+  }finally{if(P===PP){busy=false;renderCompare()}}
 }
 
 /* jeden úsek: vrátí čas příchodu */
