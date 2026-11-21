@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kudy dřív">
+<title>Kudy dřív</title>
+<style>
+:root{
+  --bg:#f6f7f9; --card:#fff; --fg:#1b1f24; --muted:#5f6b7a; --line:#dde2e8;
+  --accent:#0b6bcb; --accent-fg:#fff; --ok:#1f7a3d; --warn:#a35a00; --bad:#b3261e;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#121417; --card:#1c1f24; --fg:#e8ebef; --muted:#9aa5b1; --line:#2e333a;
+  --accent:#5aa9ff; --accent-fg:#0b1520; --ok:#6fd18f; --warn:#f0b35a; --bad:#ff8a80;
+  color-scheme:dark;}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding:env(safe-area-inset-top,0) max(14px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px));}
+.wrap{max-width:640px;margin:0 auto}
+h1{font-size:1.35rem;margin:14px 0 8px}
+h2{font-size:1.05rem;margin:0 0 8px}
+nav{display:flex;gap:6px;margin-bottom:12px}
+nav button{flex:1}
+button,input,select{font:inherit;color:inherit}
+button{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+button.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+button.small{padding:4px 8px;font-size:.85rem}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input,select{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px;width:100%;min-width:0}
+input[type=checkbox]{width:auto}
+label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:3px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+.row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.row>*{flex:1 1 120px;min-width:0}
+.row>.shrink{flex:0 0 auto}
+.muted{color:var(--muted);font-size:.88rem}
+.err{color:var(--bad)}
+.ok{color:var(--ok)}
+.warn{color:var(--warn)}
+.results{margin-top:6px;display:flex;flex-direction:column;gap:4px}
+.results button{text-align:left}
+.chosen{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 8px;border:1px dashed var(--line);border-radius:8px}
+.step{border-left:3px solid var(--accent);padding:4px 0 4px 10px;margin:6px 0}
+.leg{padding:6px 0 6px 13px;color:var(--muted);font-size:.92rem}
+.leg b{color:var(--fg)}
+.btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+a.btnlink{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:.85rem;color:var(--accent);text-decoration:none}
+.tag{display:inline-block;font-size:.75rem;padding:1px 6px;border-radius:6px;border:1px solid var(--line);margin-left:4px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Kudy dřív</h1>
+  <nav>
+    <button id="tab-plan" class="on" data-tab="plan">Plán</button>
+    <button id="tab-favs" data-tab="favs">Oblíbená</button>
+    <button id="tab-set" data-tab="set">Nastavení</button>
+  </nav>
+
+  <section id="v-plan">
+    <div id="keys-warning" class="card warn" hidden>Nejdřív vlož klíče v <b>Nastavení</b>.</div>
+    <div class="card">
+      <h2>Odkud</h2>
+      <div id="start-picker"></div>
+      <div class="row" style="margin-top:8px">
+        <div><label for="dep-time">Vyrážím v</label><input id="dep-time" type="time"></div>
+        <div class="shrink"><button class="small" id="dep-now">Teď</button></div>
+      </div>
+    </div>
+
+    <div id="stops"></div>
+    <button id="add-stop" style="width:100%;margin-bottom:10px">+ Přidat místo</button>
+
+    <div class="card">
+      <label style="display:flex;gap:6px;align-items:center;color:var(--fg);font-size:.95rem">
+        <input type="checkbox" id="ret"> Na konci se vracím
+      </label>
+      <div id="end-picker" hidden style="margin-top:8px"></div>
+    </div>
+
+    <button class="primary" id="go" style="width:100%;padding:12px">Naplánovat</button>
+    <div id="out" style="margin-top:12px"></div>
+  </section>
+
+  <section id="v-favs" hidden>
+    <div class="card">
+      <h2>Přidat oblíbené místo</h2>
+      <div class="row"><div><label for="fav-name">Název (např. Domov)</label><input id="fav-name"></div></div>
+      <div id="fav-picker" style="margin-top:8px"></div>
+      <button class="primary" id="fav-save" style="margin-top:8px;width:100%">Uložit</button>
+      <div id="fav-msg" class="muted"></div>
+    </div>
+    <div id="fav-list"></div>
+  </section>
+
+  <section id="v-set" hidden>
+    <div class="card">
+      <h2>Klíče ke službám</h2>
+      <p class="muted">Uloží se jen v tomhle prohlížeči v tomhle zařízení.</p>
+      <label for="k-mapy">Mapy.cz API klíč (developer.mapy.com)</label>
+      <input id="k-mapy" autocomplete="off">
+      <label for="k-gol" style="margin-top:8px">Golemio token (api.golemio.cz)</label>
+      <input id="k-gol" autocomplete="off">
+      <button class="primary" id="k-save" style="margin-top:10px;width:100%">Uložit</button>
+      <button id="k-test" style="margin-top:6px;width:100%">Vyzkoušet spojení</button>
+      <div id="k-msg" class="muted" style="margin-top:6px"></div>
+    </div>
+    <div class="card muted">
+      <b>Jak počítám:</b> pořadí míst vybírám podle odhadu (vzdálenost + průměrná rychlost MHD). Pak pro každý úsek hledám v Golemiu skutečný přímý spoj a případně spoj s jedním přestupem. Přesné spojení si vždy můžeš ověřit tlačítkem IDOS.
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+/* ---------- úložiště ---------- */
+const store={
+  get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+let settings=store.get("kd_settings",{mapyKey:"",golemioKey:""});
+let favs=store.get("kd_favs",[]);
+let draft=store.get("kd_draft",{start:null,stops:[newStop(),newStop()],ret:false,end:null});
+function newStop(){return{place:null,stay:10,fixed:"",from:"",until:"",last:false}}
+function saveDraft(){store.set("kd_draft",draft)}
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad=n=>String(n).padStart(2,"0");
+const hm=d=>pad(d.getHours())+":"+pad(d.getMinutes());
+const addMin=(d,m)=>new Date(d.getTime()+m*60000);
+const minsBetween=(a,b)=>Math.round((b-a)/60000);
+function todayAt(t){if(!t)return null;const[h,m]=t.split(":").map(Number);const d=new Date();d.setHours(h,m,0,0);return d}
+function hav(a,b){const R=6371,r=x=>x*Math.PI/180;const dl=r(b.lat-a.lat),dn=r(b.lon-a.lon);
+  const x=Math.sin(dl/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
+const walkMin=km=>Math.max(1,Math.round(km*1.3/4.8*60));
+/* odhad MHD v Praze */
+function estMin(a,b){const d=hav(a,b);if(d<0.7)return walkMin(d);return Math.round(8+d*1.3*60/22)}
+
+/* ---------- záložky ---------- */
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x===b));
+  ["plan","favs","set"].forEach(t=>$("#v-"+t).hidden=t!==b.dataset.tab);
+  if(b.dataset.tab==="favs")renderFavs();
+  if(b.dataset.tab==="plan")renderPlan();
+});
+
+/* ---------- API ---------- */
+class ApiErr extends Error{}
+async function safeFetch(url,opts,who){
+  let r;
+  try{r=await fetch(url,opts)}catch(e){throw new ApiErr(who+": nepodařilo se spojit. Zkontroluj internet. Pokud to trvá, služba možná nepovoluje přístup z prohlížeče.")}
+  if(r.status===401||r.status===403)throw new ApiErr(who+": klíč nebyl přijat. Zkontroluj ho v Nastavení.");
+  if(!r.ok)throw new ApiErr(who+": chyba "+r.status);
+  return r.json();
+}
+async function mapyGeocode(q){
+  if(!settings.mapyKey)throw new ApiErr("Chybí klíč k Mapy.cz (Nastavení).");
+  const u=new URL("https://api.mapy.com/v1/geocode");
+  u.searchParams.set("query",q);u.searchParams.set("lang","cs");u.searchParams.set("limit","7");
+  u.searchParams.set("apikey",settings.mapyKey);
+  const j=await safeFetch(u,{}, "Mapy.cz");
+  return (j.items||[]).map(it=>({name:it.name,label:[it.name,it.location].filter(Boolean).join(", "),lat:it.position.lat,lon:it.position.lon}));
+}
+let gLast=0;
+async function gget(path,params){
+  if(!settings.golemioKey)throw new ApiErr("Chybí Golemio token (Nastavení).");
+  const u=new URL("https://api.golemio.cz"+path);
+  for(const[k,v]of Object.entries(params||{})){
+    if(Array.isArray(v))v.forEach(x=>u.searchParams.append(k+"[]",x));else if(v!==undefined&&v!==null)u.searchParams.set(k,v);
+  }
+  const wait=Math.max(0,gLast+200-Date.now());gLast=Date.now()+wait;
+  if(wait)await new Promise(r=>setTimeout(r,wait));
+  for(let i=0;i<3;i++){
+    let r;
+    try{r=await fetch(u,{headers:{"X-Access-Token":settings.golemioKey}})}
+    catch(e){throw new ApiErr("Golemio: nepodařilo se spojit. Zkontroluj internet. Pokud to trvá, služba možná nepovoluje přístup z prohlížeče.")}
+    if(r.status===429){await new Promise(res=>setTimeout(res,1500*(i+1)));continue}
+    if(r.status===401||r.status===403)throw new ApiErr("Golemio: token nebyl přijat. Zkontroluj ho v Nastavení.");
+    if(r.status===404)return null;
+    if(!r.ok)throw new ApiErr("Golemio: chyba "+r.status);
+    return r.json();
+  }
+  throw new ApiErr("Golemio: příliš mnoho dotazů, zkus to za chvíli.");
+}
+
+/* zastávky v okolí, seskupené podle jména */
+const stopCache=new Map();
+async function stopsNear(place,range=600){
+  const key=place.lat.toFixed(5)+","+place.lon.toFixed(5)+","+range+","+(place.stopName||"");
+  if(stopCache.has(key))return stopCache.get(key);
+  const j=await gget("/v2/gtfs/stops",{latlng:place.lat+","+place.lon,range,limit:60});
+  const groups=new Map();
+  for(const f of (j&&j.features)||[]){
+    const p=f.properties||{};const c=(f.geometry||{}).coordinates||[];
+    if(p.location_type&&p.location_type!==0)continue;
+    const name=p.stop_name;if(!name)continue;
+    if(place.stopName&&name!==place.stopName)continue;
+    const d=hav(place,{lat:c[1],lon:c[0]});
+    const g=groups.get(name)||{name,ids:[],dist:99};
+    g.ids.push(p.stop_id);g.dist=Math.min(g.dist,d);groups.set(name,g);
+  }
+  const res=[...groups.values()].sort((a,b)=>a.dist-b.dist);
+  stopCache.set(key,res);return res;
+}
+async function stopByName(name){
+  const j=await gget("/v2/gtfs/stops",{names:[name],limit:30});
+  const fs=((j&&j.features)||[]).filter(f=>f.properties&&f.properties.stop_name===name);
+  if(!fs.length)return null;
+  const c=fs[0].geometry.coordinates;
+  return{name,label:name+" (zastávka)",lat:c[1],lon:c[0],stopName:name};
+}
+
+const tripCache=new Map();
+async function getTrip(id){
+  if(tripCache.has(id))return tripCache.get(id);
+  const j=await gget("/v2/gtfs/trips/"+encodeURIComponent(id),{includeStopTimes:"true",includeStops:"true"});
+  const st=((j&&(j.stop_times||j.stopTimes))||[]).map(s=>{
+    const stop=s.stop||{};const props=stop.properties||stop;
+    return{id:s.stop_id,name:props.stop_name||"",arr:toSec(s.arrival_time),dep:toSec(s.departure_time),seq:Number(s.stop_sequence)};
+  }).sort((a,b)=>a.seq-b.seq);
+  tripCache.set(id,st);return st;
+}
+function toSec(t){if(!t)return null;const[h,m,s]=String(t).split(":").map(Number);return h*3600+m*60+(s||0)}
+
+async function board(groups,from,minutesAfter,mode){
+  const ids=groups.flatMap(g=>g.ids).slice(0,80);
+  if(!ids.length)return[];
+  const iso=from.getFullYear()+"-"+pad(from.getMonth()+1)+"-"+pad(from.getDate())+"T"+pad(from.getHours())+":"+pad(from.getMinutes())+":00";
+  const j=await gget("/v2/pid/departureboards",{ids,timeFrom:iso,minutesBefore:0,minutesAfter,limit:100,mode,includeMetroTrains:"true",preferredTimezone:"Europe/Prague"});
+  const tsKey=mode==="arrivals"?"arrival_timestamp":"departure_timestamp";
+  return((j&&j.departures)||[]).map(d=>{
+    const ts=d[tsKey]||d.departure_timestamp||{};
+    return{time:new Date(ts.predicted||ts.scheduled),line:(d.route||{}).short_name||"?",type:(d.route||{}).type,
+      tripId:(d.trip||{}).id,headsign:(d.trip||{}).headsign||"",stopId:(d.stop||{}).id};
+  }).filter(d=>d.tripId&&!isNaN(d.time));
+}
+function nameOfId(groups,id){const g=groups.find(g=>g.ids.includes(id));return g?g.name:null}
+const typeIcon=t=>({0:"🚋",1:"🚇",2:"🚆",3:"🚌",4:"⛴",7:"🚡",11:"🚎"}[t]||"🚍");
+
+/* přímé spoje A → B */
+async function directLeg(from,to,leaveAt){
+  const fromStops=(await stopsNear(from)).slice(0,4);
+  const toStops=await stopsNear(to);
+  if(!fromStops.length)throw new ApiErr("U místa „"+from.name+"“ jsem nenašla zastávku do 600 m.");
+  if(!toStops.length)throw new ApiErr("U místa „"+to.name+"“ jsem nenašla zastávku do 600 m.");
+  const minWalk=Math.min(...fromStops.map(g=>walkMin(g.dist)));
+  const deps=await board(fromStops,addMin(leaveAt,minWalk),75,"departures");
+  const toIds=new Set(toStops.flatMap(g=>g.ids));const toNames=new Map(toStops.map(g=>[g.name,g]));
+  const patterns=new Map();const options=[];const reach=[];
+  let fetched=0;
+  for(const d of deps){
+    const fromName=nameOfId(fromStops,d.stopId);if(!fromName)continue;
+    const g=fromStops.find(x=>x.name===fromName);const wf=walkMin(g.dist);
+    if(d.time<addMin(leaveAt,wf))continue;
+    const pk=d.line+"|"+d.headsign+"|"+fromName;
+    if(!patterns.has(pk)){
+      if(fetched>=12){continue}
+      fetched++;
+      let pat=null;
+      try{
+        const st=await getTrip(d.tripId);
+        const i=st.findIndex(s=>s.id===d.stopId||s.name===fromName);
+        if(i>=0){
+          const base=st[i].dep??st[i].arr;
+          const after=st.slice(i+1).map(s=>({name:s.name,id:s.id,off:Math.round(((s.arr??s.dep)-base)/60)}));
+          reach.push({line:d.line,type:d.type,fromName,after});
+          const hit=after.find(s=>toIds.has(s.id)||toNames.has(s.name));
+          if(hit)pat={off:hit.off,toName:hit.name||nameOfId(toStops,hit.id)};
+        }
+      }catch(e){if(e instanceof ApiErr&&/token/.test(e.message))throw e}
+      patterns.set(pk,pat);
+    }
+    const pat=patterns.get(pk);if(!pat)continue;
+    const tg=toNames.get(pat.toName)||toStops.find(x=>x.name===pat.toName)||{dist:0.3};
+    const wt=walkMin(tg.dist);
+    const arrStop=addMin(d.time,pat.off);
+    options.push({leave:addMin(d.time,-wf),walkFrom:wf,fromName,dep:d.time,line:d.line,type:d.type,headsign:d.headsign,
+      toName:pat.toName,arrStop,walkTo:wt,arrive:addMin(arrStop,wt)});
+  }
+  options.sort((a,b)=>a.arrive-b.arrive);
+  return{options,fromStops,toStops,reach};
+}
+function pickOption(opts,arriveBy){
+  if(!opts.length)return null;
+  if(arriveBy){
+    const ok=opts.filter(o=>o.arrive<=addMin(arriveBy,-2));
+    if(ok.length)return ok.reduce((a,b)=>b.leave>a.leave?b:a);
+  }
+  return opts[0];
+}
+
+/* návrh přestupů, když přímý spoj není */
+async function transferCandidates(direct,leaveAt){
+  const arr=await board(direct.toStops,addMin(leaveAt,10),90,"arrivals");
+  const before=new Map();const seen=new Set();let n=0;
+  const toIds=new Set(direct.toStops.flatMap(g=>g.ids));const toNames=new Set(direct.toStops.map(g=>g.name));
+  for(const a of arr){
+    const k=a.line+"|"+a.headsign;if(seen.has(k))continue;seen.add(k);
+    if(++n>10)break;
+    try{
+      const st=await getTrip(a.tripId);
+      const i=st.findIndex(s=>toIds.has(s.id)||toNames.has(s.name));if(i<0)continue;
+      const base=st[i].arr??st[i].dep;
+      st.slice(0,i).forEach(s=>{const off=Math.round((base-(s.dep??s.arr))/60);
+        if(!before.has(s.name)||before.get(s.name)>off)before.set(s.name,off)});
+    }catch(e){}
+  }
+  const fromNames=new Set(direct.fromStops.map(g=>g.name));
+  const cand=new Map();
+  for(const r of direct.reach)for(const s of r.after){
+    if(!s.name||fromNames.has(s.name)||toNames.has(s.name)||!before.has(s.name))continue;
+    const est=s.off+4+before.get(s.name);
+    if(!cand.has(s.name)||cand.get(s.name)>est)cand.set(s.name,est);
+  }
+  return[...cand.entries()].sort((a,b)=>a[1]-b[1]).slice(0,3).map(([name,est])=>({name,est}));
+}
+async function viaLeg(from,to,leaveAt,viaName,arriveBy){
+  const T=await stopByName(viaName);
+  if(!T)throw new ApiErr("Zastávku „"+viaName+"“ jsem nenašla. Zkus přesný název jako v jízdním řádu.");
+  const l1=await directLeg(from,T,leaveAt);const o1=pickOption(l1.options);
+  if(!o1)return null;
+  const l2=await directLeg(T,to,addMin(o1.arrStop,3));
+  let o2=pickOption(l2.options,arriveBy);
+  if(!o2)return null;
+  o1.walkTo=0;o2.walkFrom=0;
+  return{parts:[o1,o2],leave:o1.leave,arrive:o2.arrive,via:viaName};
+}
+
+/* ---------- výběr místa ---------- */
+function picker(el,current,onPick,opts={}){
+  const id="p"+Math.random().toString(36).slice(2,8);
+  function draw(){
+    if(current){
+      el.innerHTML=`<div class="chosen"><span>${esc(current.label||current.name)}</span><button class="small" id="${id}-x">Změnit</button></div>`;
+      el.querySelector("#"+id+"-x").onclick=()=>{current=null;onPick(null);draw()};
+      return;
+    }
+    const favOpts=favs.map((f,i)=>`<option value="f${i}">⭐ ${esc(f.name)}</option>`).join("");
+    el.innerHTML=`
+      <div class="row">
+        <div><select id="${id}-s" aria-label="Vybrat místo"><option value="">Vybrat…</option>${opts.allowGeo?'<option value="geo">📍 Moje poloha</option>':""}${favOpts}</select></div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <div><input id="${id}-q" placeholder="nebo hledej adresu, místo, zastávku"></div>
+        <div class="shrink"><button id="${id}-b">Hledat</button></div>
+      </div>
+      <div class="results" id="${id}-r"></div>`;
+    const q=el.querySelector("#"+id+"-q"),r=el.querySelector("#"+id+"-r");
+    el.querySelector("#"+id+"-s").onchange=async e=>{
+      const v=e.target.value;if(!v)return;
+      if(v==="geo"){
+        r.innerHTML='<span class="muted">Zjišťuji polohu…</span>';
+        if(!navigator.geolocation){r.innerHTML='<span class="err">Tenhle prohlížeč polohu nezjistí.</span>';return}
+        navigator.geolocation.getCurrentPosition(p=>{current={name:"Moje poloha",label:"📍 Moje poloha",lat:p.coords.latitude,lon:p.coords.longitude};onPick(current);draw()},
+          ()=>{r.innerHTML='<span class="err">Polohu se nepodařilo zjistit. Povol ji v prohlížeči, nebo vyber místo ručně.</span>'},{enableHighAccuracy:true,timeout:15000});
+        return;
+      }
+      const f=favs[Number(v.slice(1))];current={...f,label:"⭐ "+f.name};onPick(current);draw();
+    };
+    const search=async()=>{
+      const text=q.value.trim();if(!text)return;
+      r.innerHTML='<span class="muted">Hledám…</span>';
+      try{
+        let items=await mapyGeocode(text);
+        if(!items.length){r.innerHTML='<span class="muted">Nic jsem nenašla. Zkus přidat „Praha“.</span>';return}
+        r.innerHTML=items.map((it,i)=>`<button data-i="${i}">${esc(it.label)}</button>`).join("");
+        r.querySelectorAll("button").forEach(b=>b.onclick=()=>{current=items[Number(b.dataset.i)];onPick(current);draw()});
+      }catch(e){r.innerHTML=`<span class="err">${esc(e.message)}</span>`}
+    };
+    el.querySelector("#"+id+"-b").onclick=search;
+    q.onkeydown=e=>{if(e.key==="Enter")search()};
+  }
+  draw();
+}
+
+/* ---------- plán ---------- */
+function renderPlan(){
+  $("#keys-warning").hidden=!!(settings.mapyKey&&settings.golemioKey);
+  picker($("#start-picker"),draft.start,p=>{draft.start=p;saveDraft()},{allowGeo:true});
+  const box=$("#stops");box.innerHTML="";
+  draft.stops.forEach((s,i)=>{
+    const c=document.createElement("div");c.className="card";
+    c.innerHTML=`<div class="row" style="align-items:center"><h2 style="margin:0">Místo ${i+1}</h2>
+      <div class="shrink"><button class="small" data-del>Odebrat</button></div></div>
+      <div data-pk style="margin-top:6px"></div>
+      <div class="row" style="margin-top:8px">
+        <div><label for="st${i}">Zdržím se (min)</label><input id="st${i}" type="number" min="0" step="5" value="${s.stay}"></div>
+        <div><label for="fx${i}">Pevný čas (schůzka)</label><input id="fx${i}" type="time" value="${s.fixed}"></div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <div><label for="fr${i}">Otevírá od</label><input id="fr${i}" type="time" value="${s.from}"></div>
+        <div><label for="un${i}">Otevřeno do</label><input id="un${i}" type="time" value="${s.until}"></div>
+      </div>
+      <label style="display:flex;gap:6px;align-items:center;margin-top:8px;color:var(--fg)"><input type="checkbox" id="la${i}" ${s.last?"checked":""}> Až nakonec</label>`;
+    box.appendChild(c);
+    picker(c.querySelector("[data-pk]"),s.place,p=>{s.place=p;saveDraft()});
+    c.querySelector("[data-del]").onclick=()=>{draft.stops.splice(i,1);saveDraft();renderPlan()};
+    const bind=(sel,key,fn=v=>v)=>{c.querySelector(sel).onchange=e=>{s[key]=fn(e.target.type==="checkbox"?e.target.checked:e.target.value);saveDraft()}};
+    bind("#st"+i,"stay",v=>Math.max(0,Number(v)||0));bind("#fx"+i,"fixed");bind("#fr"+i,"from");bind("#un"+i,"until");bind("#la"+i,"last");
+  });
+  $("#ret").checked=draft.ret;
+  $("#end-picker").hidden=!draft.ret;
+  if(draft.ret)picker($("#end-picker"),draft.end||draft.start,p=>{draft.end=p;saveDraft()},{allowGeo:false});
+}
+$("#add-stop").onclick=()=>{if(draft.stops.length>=7)return;draft.stops.push(newStop());saveDraft();renderPlan()};
+$("#ret").onchange=e=>{draft.ret=e.target.checked;saveDraft();renderPlan()};
+$("#dep-now").onclick=()=>{$("#dep-time").value=hm(new Date())};
+$("#dep-time").value=hm(new Date());
+
+/* nejlepší pořadí podle odhadu */
+function bestOrder(start,stops,end,depart){
+  const idx=stops.map((_,i)=>i);let best=null;
+  const lastIdx=idx.filter(i=>stops[i].last),mid=idx.filter(i=>!stops[i].last);
+  const perms=a=>a.length<=1?[a]:a.flatMap((x,i)=>perms([...a.slice(0,i),...a.slice(i+1)]).map(p=>[x,...p]));
+  for(const pm of perms(mid))for(const pl of perms(lastIdx)){
+    const order=[...pm,...pl];let t=depart,prev=start,late=0,wait=0;
+    for(const i of order){
+      const s=stops[i];t=addMin(t,estMin(prev,s.place));
+      const fx=todayAt(s.fixed),fr=todayAt(s.from),un=todayAt(s.until);
+      if(fx){if(t>fx)late+=minsBetween(fx,t);else{wait+=minsBetween(t,fx);t=fx}}
+      if(fr&&t<fr){wait+=minsBetween(t,fr);t=fr}
+      if(un&&addMin(t,s.stay)>un)late+=minsBetween(un,addMin(t,s.stay));
+      t=addMin(t,s.stay);prev=s.place;
+    }
+    if(end)t=addMin(t,estMin(prev,end));
+    const cost=late*1000+minsBetween(depart,t)+wait*0.2;
+    if(!best||cost<best.cost)best={order,cost,late,finish:t};
+  }
+  return best;
+}
+
+function idosLink(fromName,toName,when){
+  const d=when||new Date();
+  const u=new URL("https://idos.cz/pid/spojeni/");
+  u.searchParams.set("f",fromName);u.searchParams.set("t",toName);
+  u.searchParams.set("date",d.getDate()+"."+(d.getMonth()+1)+"."+d.getFullYear());u.searchParams.set("time",hm(d));
+  return u.toString();
+}
+function walkLink(a,b){return`https://mapy.com/fnc/v1/route?start=${a.lon},${a.lat}&end=${b.lon},${b.lat}&routeType=foot_fast`}
+function partHtml(o){
+  return`${o.walkFrom?`🚶 ${o.walkFrom} min → `:""}<b>${typeIcon(o.type)} ${esc(o.line)}</b> v <b>${hm(o.dep)}</b> z <b>${esc(o.fromName)}</b> <span class="muted">(směr ${esc(o.headsign)})</span> → <b>${esc(o.toName)}</b> ${hm(o.arrStop)}${o.walkTo?` → 🚶 ${o.walkTo} min`:""}`;
+}
+
+$("#go").onclick=plan;
+async function plan(){
+  const out=$("#out");
+  const stops=draft.stops.filter(s=>s.place);
+  if(!draft.start){out.innerHTML='<div class="card err">Vyber, odkud vyrážíš.</div>';return}
+  if(!stops.length){out.innerHTML='<div class="card err">Přidej aspoň jedno místo.</div>';return}
+  if(!settings.golemioKey||!settings.mapyKey){out.innerHTML='<div class="card err">Nejdřív vlož klíče v Nastavení.</div>';return}
+  const depart=todayAt($("#dep-time").value)||new Date();
+  const end=draft.ret?(draft.end||draft.start):null;
+  const best=bestOrder(draft.start,stops,end,depart);
+  const seq=best.order.map(i=>stops[i]);
+  const nodes=[{place:draft.start,stay:0},...seq,...(end?[{place:end,stay:0,isEnd:true}]:[])];
+
+  out.innerHTML=`<div class="card"><h2>Pořadí</h2><div class="muted">${seq.map((s,i)=>(i+1)+". "+esc(s.place.name)).join(" → ")}${end?" → "+esc(end.name):""}</div>
+    ${best.late?'<div class="warn" style="margin-top:4px">Pozor: podle odhadu se nevejdeš do všech časů.</div>':""}
+    <div id="legs" style="margin-top:8px"></div></div>`;
+  const legsEl=$("#legs");
+  let cur=depart;
+  legsEl.insertAdjacentHTML("beforeend",`<div class="step"><b>${hm(cur)}</b> vyrážíš: ${esc(draft.start.name)}</div>`);
+  for(let k=1;k<nodes.length;k++){
+    const from=nodes[k-1].place,node=nodes[k],to=node.place;
+    const legDiv=document.createElement("div");legDiv.className="leg";legDiv.textContent="Hledám spoj…";legsEl.appendChild(legDiv);
+    const arriveBy=todayAt(node.fixed);
+    let arrival;
+    try{arrival=await renderLeg(legDiv,from,to,cur,arriveBy)}
+    catch(e){legDiv.innerHTML=`<span class="err">${esc(e.message)}</span>`;arrival=addMin(cur,estMin(from,to))}
+    cur=arrival;
+    const fx=todayAt(node.fixed),fr=todayAt(node.from),un=todayAt(node.until);
+    let note="";
+    if(fx){if(cur>fx)note=` <span class="err">přijdeš o ${minsBetween(fx,cur)} min pozdě na ${node.fixed}</span>`;else{note=` <span class="ok">schůzka ${node.fixed}</span>`;cur=fx}}
+    if(fr&&cur<fr){note+=` <span class="warn">otevírá až ${node.from}</span>`;cur=fr}
+    if(un&&addMin(cur,node.stay)>un)note+=` <span class="err">zavírají v ${node.until}</span>`;
+    const label=node.isEnd?"konec: "+esc(to.name):(k)+". "+esc(to.name);
+    legsEl.insertAdjacentHTML("beforeend",`<div class="step"><b>${hm(arrival)}</b> ${label}${node.stay?` <span class="muted">(${node.stay} min)</span>`:""}${note}</div>`);
+    cur=addMin(cur,node.stay||0);
+  }
+  legsEl.insertAdjacentHTML("beforeend",`<div class="muted" style="margin-top:6px">Hotovo kolem <b>${hm(cur)}</b>.</div>`);
+}
+
+/* jeden úsek: vrátí čas příchodu */
+async function renderLeg(el,from,to,leaveAt,arriveBy,via){
+  const d=hav(from,to);
+  if(d<0.7&&!via){
+    const w=walkMin(d);
+    el.innerHTML=`🚶 pěšky ${w} min <div class="btns"><a class="btnlink" target="_blank" rel="noopener" href="${walkLink(from,to)}">Trasa v Mapy.cz</a></div>`;
+    return addMin(leaveAt,w);
+  }
+  el.innerHTML="Hledám spoj…";
+  if(via){
+    const v=await viaLeg(from,to,leaveAt,via,arriveBy);
+    if(!v){el.innerHTML=`<span class="warn">Přes ${esc(via)} jsem spoj v nejbližší hodině nenašla.</span>`+viaForm(el,from,to,leaveAt,arriveBy,[]);bindVia(el,from,to,leaveAt,arriveBy);return addMin(leaveAt,estMin(from,to))}
+    el.innerHTML=`<div>${partHtml(v.parts[0])}</div><div>⏱ přestup ${minsBetween(v.parts[0].arrStop,v.parts[1].dep)} min</div><div>${partHtml(v.parts[1])}</div>
+      <div class="btns"><a class="btnlink" target="_blank" rel="noopener" href="${idosLink(v.parts[0].fromName,v.parts[1].toName,v.parts[0].dep)}">Ověřit v IDOS</a></div>`+viaForm(el,from,to,leaveAt,arriveBy,[]);
+    bindVia(el,from,to,leaveAt,arriveBy);
+    return v.arrive;
+  }
+  const dl=await directLeg(from,to,leaveAt);
+  const o=pickOption(dl.options,arriveBy);
+  const fs=dl.fromStops[0].name,ts=dl.toStops[0].name;
+  if(o){
+    let alt="";
+    const others=dl.options.filter(x=>x!==o).slice(0,2);
+    if(others.length)alt=`<div class="muted">Další: ${others.map(x=>`${esc(x.line)} v ${hm(x.dep)} (příchod ${hm(x.arrive)})`).join(", ")}</div>`;
+    el.innerHTML=`<div>${partHtml(o)}</div>${o.leave>leaveAt?`<div class="muted">Vyraž v ${hm(o.leave)}.</div>`:""}${alt}
+      <div class="btns"><a class="btnlink" target="_blank" rel="noopener" href="${idosLink(o.fromName,o.toName,o.dep)}">Ověřit v IDOS</a></div>`+viaForm(el,from,to,leaveAt,arriveBy,[]);
+    bindVia(el,from,to,leaveAt,arriveBy);
+    return o.arrive;
+  }
+  el.innerHTML=`<span class="warn">Přímý spoj v nejbližší hodině není.</span> Hledám přestupy…`;
+  let cands=[];
+  try{cands=await transferCandidates(dl,leaveAt)}catch(e){}
+  if(cands.length){
+    try{
+      const v=await viaLeg(from,to,leaveAt,cands[0].name,arriveBy);
+      if(v){
+        el.innerHTML=`<div class="warn">Přímý spoj není, nejlépe přes <b>${esc(cands[0].name)}</b>:</div>
+          <div>${partHtml(v.parts[0])}</div><div>⏱ přestup ${minsBetween(v.parts[0].arrStop,v.parts[1].dep)} min</div><div>${partHtml(v.parts[1])}</div>
+          <div class="btns"><a class="btnlink" target="_blank" rel="noopener" href="${idosLink(v.parts[0].fromName,v.parts[1].toName,v.parts[0].dep)}">Ověřit v IDOS</a></div>`+viaForm(el,from,to,leaveAt,arriveBy,cands.slice(1));
+        bindVia(el,from,to,leaveAt,arriveBy);
+        return v.arrive;
+      }
+    }catch(e){}
+  }
+  const est=estMin(from,to);
+  el.innerHTML=`<div class="warn">Přímý spoj ani přestup jsem nenašla. Odhad cesty ${est} min.</div>
+    <div class="btns"><a class="btnlink" target="_blank" rel="noopener" href="${idosLink(fs,ts,leaveAt)}">Najít v IDOS</a></div>`+viaForm(el,from,to,leaveAt,arriveBy,cands);
+  bindVia(el,from,to,leaveAt,arriveBy);
+  return addMin(leaveAt,est);
+}
+function viaForm(el,from,to,leaveAt,arriveBy,cands){
+  return`<div class="btns" data-via>
+    ${cands.map(c=>`<button class="small" data-c="${esc(c.name)}">přes ${esc(c.name)} (~${c.est} min)</button>`).join("")}
+    <input data-vi placeholder="Jet přes zastávku…" style="flex:1 1 140px;padding:4px 8px;font-size:.85rem"><button class="small" data-vb>Spočítat</button></div>
+    <div class="muted" style="font-size:.8rem">Změna úseku neposune časy dalších míst. Pro přepočet klepni znovu na Naplánovat.</div>`;
+}
+function bindVia(el,from,to,leaveAt,arriveBy){
+  const run=name=>{if(!name)return;renderLeg(el,from,to,leaveAt,arriveBy,name).catch(e=>{el.innerHTML=`<span class="err">${esc(e.message)}</span>`})};
+  el.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>run(b.dataset.c));
+  const inp=el.querySelector("[data-vi]");
+  el.querySelector("[data-vb]").onclick=()=>run(inp.value.trim());
+  inp.onkeydown=e=>{if(e.key==="Enter")run(inp.value.trim())};
+}
+
+/* ---------- oblíbená ---------- */
+let favPick=null;
+function renderFavs(){
+  picker($("#fav-picker"),null,p=>{favPick=p});
+  const list=$("#fav-list");
+  if(!favs.length){list.innerHTML='<div class="card muted">Zatím tu nic není. Přidej třeba Domov nebo Práci.</div>';return}
+  list.innerHTML=favs.map((f,i)=>`<div class="card row" style="align-items:center"><div><b>${esc(f.name)}</b><div class="muted">${esc(f.label||"")}</div></div>
+    <div class="shrink"><button class="small" data-up="${i}" ${i?"":"disabled"}>↑</button> <button class="small" data-rm="${i}">Smazat</button></div></div>`).join("");
+  list.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{favs.splice(Number(b.dataset.rm),1);store.set("kd_favs",favs);renderFavs()});
+  list.querySelectorAll("[data-up]").forEach(b=>b.onclick=()=>{const i=Number(b.dataset.up);[favs[i-1],favs[i]]=[favs[i],favs[i-1]];store.set("kd_favs",favs);renderFavs()});
+}
+$("#fav-save").onclick=()=>{
+  const name=$("#fav-name").value.trim();
+  if(!name||!favPick){$("#fav-msg").textContent="Vyplň název a vyhledej místo.";return}
+  favs.push({name,label:favPick.label||favPick.name,lat:favPick.lat,lon:favPick.lon});
+  store.set("kd_favs",favs);$("#fav-name").value="";favPick=null;$("#fav-msg").textContent="Uloženo.";renderFavs();
+};
+
+/* ---------- nastavení ---------- */
+$("#k-mapy").value=settings.mapyKey;$("#k-gol").value=settings.golemioKey;
+$("#k-save").onclick=()=>{settings={mapyKey:$("#k-mapy").value.trim(),golemioKey:$("#k-gol").value.trim()};store.set("kd_settings",settings);$("#k-msg").textContent="Uloženo."};
+$("#k-test").onclick=async()=>{
+  const m=$("#k-msg");m.innerHTML="Zkouším…";const res=[];
+  try{const r=await mapyGeocode("Václavské náměstí, Praha");res.push(r.length?'<span class="ok">Mapy.cz: funguje</span>':'<span class="warn">Mapy.cz: odpověď prázdná</span>')}catch(e){res.push(`<span class="err">${esc(e.message)}</span>`)}
+  try{const r=await stopsNear({lat:50.0815,lon:14.4255},300);res.push(r.length?`<span class="ok">Golemio: funguje (např. ${esc(r[0].name)})</span>`:'<span class="warn">Golemio: odpověď prázdná</span>')}catch(e){res.push(`<span class="err">${esc(e.message)}</span>`)}
+  m.innerHTML=res.join("<br>");
+};
+
+renderPlan();
+</script>
+</body>
+</html>
